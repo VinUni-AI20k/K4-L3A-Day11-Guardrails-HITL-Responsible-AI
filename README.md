@@ -1,3 +1,32 @@
+# Bài nộp cá nhân — Nguyễn Bá Chính
+
+- **MSSV:** 2A202602654
+- **Blue:** OpenRouter `liquid/lfm-2.5-2.6b:free`. Route không có `:free` trả lỗi 404 trong lần chạy ngày 26/09/2026; cần coach xác nhận chấp nhận route này.
+- **Red / Red Advance:** OpenAI `gpt-4o-mini`; đặt `RED_TEAM_PROVIDER=openai` trong `.env` local.
+- **Bonus đề nghị:** B1 (Red), phụ thuộc grader replay.
+
+### Chạy và kiểm tra (PowerShell, từ thư mục gốc)
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests -q
+python src/main.py --part 2
+python src/main.py --part 3
+python src/main.py --part 4
+python scripts/grade.py --submission-dir . --out outputs/grade_report.json
+```
+
+CP3 hiển thị tiến độ, ghi `status`, `error`, `redacted` và model Blue thực tế.
+Lỗi API tạm thời được thử lại tối đa 2 lần, chờ 10/20 giây; timeout mỗi lượt 30 giây.
+Nếu vẫn lỗi, CP3 lưu bằng chứng lỗi và kết thúc với lỗi thay vì báo hoàn thành.
+Không commit `.env`. Không chỉnh sửa JSON kết quả bằng tay.
+
+**Trạng thái bằng chứng:** `outputs/` hiện là kết quả chạy thật trước bản sửa guardrails này.
+Cần chạy lại CP3 và grader trên máy có API key để cập nhật bằng chứng cho code mới.
+CP4 và target Red Advance không được sửa trong bản vá này; giữ bằng chứng OpenAI hiện có nếu không chạy lại CP4.
+
+---
+
 # Day 11 — Controlled Agent Security (2026)
 
 > 👤 **Hình thức:** bài tập **cá nhân** (1 người / 1 MSSV).  

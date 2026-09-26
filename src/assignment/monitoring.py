@@ -38,20 +38,110 @@ class MonitoringAlert:
     total_requests: int = 0
     blocked_requests: int = 0
     rate_limit_hits: int = 0
+    api_errors: int = 0
+    redacted_responses: int = 0
     judge_checks: int = 0
     judge_fails: int = 0
 
     def check_metrics(self) -> list[Alert]:
-        """TODO: compute rates, append Alert objects when thresholds exceeded."""
-        raise NotImplementedError("Implement MonitoringAlert.check_metrics")
+        """Compute metrics and create alerts when thresholds are exceeded."""
+
+        # Không giữ alert cũ khi kiểm tra lại
+        self.alerts = []
+
+        # --------------------------------------------------------
+        # 1. Block rate
+        # --------------------------------------------------------
+
+        block_rate = (
+            self.blocked_requests / self.total_requests
+            if self.total_requests
+            else 0.0
+        )
+
+        if block_rate > self.block_rate_threshold:
+            self.alerts.append(
+                Alert(
+                    metric="block_rate",
+                    value=block_rate,
+                    threshold=self.block_rate_threshold,
+                    message=(
+                        f"Block rate is too high: "
+                        f"{block_rate:.2%} > "
+                        f"{self.block_rate_threshold:.2%}"
+                    ),
+                )
+            )
+
+        # --------------------------------------------------------
+        # 2. Rate-limit hits
+        # --------------------------------------------------------
+
+        if self.rate_limit_hits > self.rate_limit_hit_threshold:
+            self.alerts.append(
+                Alert(
+                    metric="rate_limit_hits",
+                    value=float(self.rate_limit_hits),
+                    threshold=float(self.rate_limit_hit_threshold),
+                    message=(
+                        f"Rate-limit hits exceeded threshold: "
+                        f"{self.rate_limit_hits} > "
+                        f"{self.rate_limit_hit_threshold}"
+                    ),
+                )
+            )
+
+        # --------------------------------------------------------
+        # 3. Judge fail rate
+        # --------------------------------------------------------
+
+        judge_fail_rate = (
+            self.judge_fails / self.judge_checks
+            if self.judge_checks
+            else 0.0
+        )
+
+        if judge_fail_rate > self.judge_fail_rate_threshold:
+            self.alerts.append(
+                Alert(
+                    metric="judge_fail_rate",
+                    value=judge_fail_rate,
+                    threshold=self.judge_fail_rate_threshold,
+                    message=(
+                        f"Judge fail rate is too high: "
+                        f"{judge_fail_rate:.2%} > "
+                        f"{self.judge_fail_rate_threshold:.2%}"
+                    ),
+                )
+            )
+
+        return self.alerts
 
     def export_json(self, filepath: str | None = None):
-        """TODO: write metrics + alerts to JSON under repo-root ``outputs/`` by default.
-        Use ``filepath or default_metrics_path()`` so running from ``src/`` does not
-        create ``src/outputs/``.
-        """
-        _ = filepath or default_metrics_path()
-        raise NotImplementedError("Implement MonitoringAlert.export_json")
+        """Write metrics + alerts to JSON."""
+
+        path = Path(filepath or default_metrics_path())
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # Đảm bảo alerts được cập nhật trước khi export
+        self.check_metrics()
+
+        data = self.snapshot()
+
+        path.write_text(
+            json.dumps(
+                data,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        return path
 
     def snapshot(self) -> dict:
         block_rate = (
@@ -64,6 +154,8 @@ class MonitoringAlert:
         )
         return {
             "total_requests": self.total_requests,
+            "api_errors": self.api_errors,
+            "redacted_responses": self.redacted_responses,
             "blocked_requests": self.blocked_requests,
             "block_rate": block_rate,
             "rate_limit_hits": self.rate_limit_hits,

@@ -8,6 +8,8 @@ Gemini Red Team dùng Google ADK trong agents/*.py — không đi qua file này.
 """
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -49,7 +51,7 @@ class OpenAIRunner:
     def _client(self):
         from openai import OpenAI
 
-        return OpenAI(**(self.client_kwargs or {}))
+        return OpenAI(**{**(self.client_kwargs or {}), "max_retries": 0, "timeout": 30.0})
 
     async def chat(self, agent: OpenAIAgent, user_message: str) -> str:
         for hook in self.input_hooks:
@@ -61,15 +63,31 @@ class OpenAIRunner:
         if block_msg is not None:
             return block_msg
 
-        client = self._client()
-        completion = client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": agent.instruction},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=self.temperature,
-        )
+        # Retry only the model call: do not charge the local rate limiter again.
+        with self._client() as client:
+            for attempt in range(3):
+                try:
+                    completion = await asyncio.to_thread(
+                        client.chat.completions.create,
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": agent.instruction},
+                            {"role": "user", "content": user_message},
+                        ],
+                        temperature=self.temperature,
+                    )
+                    break
+                except Exception as exc:
+                    from openai import APIConnectionError, APITimeoutError
+                    code = getattr(exc, "status_code", None)
+                    transient = code in (408, 429, 500, 502, 503, 504) or isinstance(
+                        exc, (APIConnectionError, APITimeoutError)
+                    )
+                    if not transient or attempt == 2:
+                        raise
+                    delay = 10 * (2 ** attempt)
+                    print(f"[{self.provider}] Temporary API error; retry {attempt + 1}/2 in {delay}s.", flush=True)
+                    await asyncio.sleep(delay)
         text = (completion.choices[0].message.content or "").strip()
 
         for hook in self.output_hooks:
